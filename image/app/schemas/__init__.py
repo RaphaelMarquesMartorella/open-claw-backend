@@ -1,0 +1,15 @@
+from .dashboard_schema import (
+    KPIResponse,
+    VendedorRankingItem,
+    VendedorRankingResponse,
+    ProdutoRankingItem,
+    ProdutoRankingResponse,
+    ClienteInativoItem,
+    ClienteInativoResponse,
+    ComparativoDiarioItem,
+    ComparativoDiarioResponse,
+    ReportResponse,
+    ReportListResponse,
+    AgentTriggerResponse,
+    VendedorDetalheResponse,
+)
