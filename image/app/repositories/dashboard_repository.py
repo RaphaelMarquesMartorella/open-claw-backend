@@ -112,25 +112,31 @@ async def get_vendedor_ranking_repository(db: AsyncSession) -> list[dict]:
 
 
 async def get_top_produtos_repository(db: AsyncSession, limit: int = 10) -> list[dict]:
-    '''Top produtos por faturamento no periodo atual.'''
+    '''Top produtos por faturamento no periodo (mes anterior + mes atual).'''
     query = text('''
+        WITH vendas AS (
+            SELECT i."CODPROD",
+                   SUM(i."VLRTOT") AS faturamento,
+                   SUM(i."QTDNEG") AS qtd_vendida
+            FROM "TGFITE" i
+            JOIN "TGFCAB" c ON i."NUNOTA" = c."NUNOTA"
+            WHERE c."DTNEG" >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+              AND c."STATUSNOTA" = 'L'
+            GROUP BY i."CODPROD"
+        )
         SELECT
             p."CODPROD",
             p."DESCRPROD",
             p."MARCA",
-            COALESCE(SUM(i."QTDNEG"), 0) AS qtd_vendida,
-            COALESCE(SUM(i."VLRTOT"), 0) AS faturamento,
+            COALESCE(v.qtd_vendida, 0) AS qtd_vendida,
+            COALESCE(v.faturamento, 0) AS faturamento,
             p."ESTOQUE",
-            CASE WHEN p."ESTOQUE" > 0 AND COALESCE(SUM(i."QTDNEG"), 0) > 0
-                THEN ROUND((p."ESTOQUE" / SUM(i."QTDNEG"))::numeric, 2)
+            CASE WHEN p."ESTOQUE" > 0 AND COALESCE(v.qtd_vendida, 0) > 0
+                THEN ROUND((p."ESTOQUE" / v.qtd_vendida)::numeric, 2)
                 ELSE 0 END AS giro
         FROM "TGFPRO" p
-        LEFT JOIN "TGFITE" i ON p."CODPROD" = i."CODPROD"
-        LEFT JOIN "TGFCAB" c ON i."NUNOTA" = c."NUNOTA"
-            AND c."DTNEG" >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
-            AND c."STATUSNOTA" = 'L'
+        LEFT JOIN vendas v ON p."CODPROD" = v."CODPROD"
         WHERE p."ATIVO" = 'S'
-        GROUP BY p."CODPROD", p."DESCRPROD", p."MARCA", p."ESTOQUE"
         ORDER BY faturamento DESC
         LIMIT :limit
     ''')
