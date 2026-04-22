@@ -95,8 +95,7 @@ async def run_agent_service(db: AsyncSession) -> dict:
                 {'role': 'system', 'content': SYSTEM_PROMPT},
                 {'role': 'user', 'content': f'Analise os seguintes dados e gere o relatorio:\n\n{data_json}'},
             ],
-            max_tokens=2000,
-            temperature=0.7,
+            max_completion_tokens=2000,
         )
         report_text = response.choices[0].message.content
         logger.info('Relatorio gerado com sucesso')
