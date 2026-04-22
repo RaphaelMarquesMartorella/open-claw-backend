@@ -90,7 +90,7 @@ async def run_agent_service(db: AsyncSession) -> dict:
     try:
         client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         response = await client.chat.completions.create(
-            model='gpt-4o-mini',
+            model='gpt-5.4',
             messages=[
                 {'role': 'system', 'content': SYSTEM_PROMPT},
                 {'role': 'user', 'content': f'Analise os seguintes dados e gere o relatorio:\n\n{data_json}'},
