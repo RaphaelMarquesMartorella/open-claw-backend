@@ -2,6 +2,8 @@
 import json
 import logging
 from collections import defaultdict, deque
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.configs import settings
@@ -20,9 +22,12 @@ MODEL = 'gpt-5.4'
 MAX_HISTORY_TURNS = 8
 MAX_TOOL_ITERATIONS = 5
 
-SYSTEM_PROMPT = '''Voce e o Gestor Comercial de Elite da Pneubras — um consultor com 20 anos de \
+SYSTEM_PROMPT_TEMPLATE = '''Voce e o Gestor Comercial de Elite da Pneubras — um consultor com 20 anos de \
 experiencia em distribuidoras de pneus. Voce responde perguntas do diretor via WhatsApp usando \
 as ferramentas disponiveis para consultar dados reais de vendas.
+
+Data/hora atual (America/Recife): {now}
+Hoje e {today}. Ontem foi {yesterday}.
 
 REGRAS:
 1. Sempre use as ferramentas para buscar dados — nunca invente numeros.
@@ -31,8 +36,23 @@ REGRAS:
 4. Formate valores como R$ 1.234,56 e percentuais como +12,3% / -5,1%.
 5. Quando listar vendedores/produtos/clientes, maximo 5-10 itens por resposta.
 6. Se a pergunta for ambigua, pergunte de volta em vez de chutar.
-7. Se a pergunta nao for sobre vendas/negocio, responda brevemente que voce e o assistente \
+7. Para perguntas sobre dia especifico (ontem, hoje, uma data), use get_comparativo_diario \
+e filtre o dia desejado no resultado — se nao houver registro do dia, diga que nao houve venda \
+lancada naquele dia.
+8. Se a pergunta nao for sobre vendas/negocio, responda brevemente que voce e o assistente \
 comercial e lista o que sabe fazer.'''
+
+
+def _build_system_prompt() -> str:
+    tz = ZoneInfo('America/Recife')
+    now = datetime.now(tz)
+    today = now.date()
+    yesterday = today.fromordinal(today.toordinal() - 1)
+    return SYSTEM_PROMPT_TEMPLATE.format(
+        now=now.strftime('%Y-%m-%d %H:%M'),
+        today=today.isoformat(),
+        yesterday=yesterday.isoformat(),
+    )
 
 TOOLS = [
     {
@@ -75,7 +95,7 @@ TOOLS = [
         'type': 'function',
         'function': {
             'name': 'get_comparativo_diario',
-            'description': 'Faturamento dia a dia nos ultimos N dias.',
+            'description': 'Faturamento dia a dia nos ultimos N dias. Use tambem para perguntas sobre dia especifico (ontem, hoje, uma data) — passe dias=7 e filtre o dia desejado no resultado.',
             'parameters': {
                 'type': 'object',
                 'properties': {'dias': {'type': 'integer', 'description': 'Quantos dias (1-90).', 'default': 30}},
@@ -131,7 +151,7 @@ async def chat_service(db: AsyncSession, sender: str, text: str) -> str:
     history = _history[sender]
     history.append({'role': 'user', 'content': text})
 
-    messages = [{'role': 'system', 'content': SYSTEM_PROMPT}] + list(history)
+    messages = [{'role': 'system', 'content': _build_system_prompt()}] + list(history)
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
