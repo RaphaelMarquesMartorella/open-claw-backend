@@ -1,6 +1,7 @@
 '''Chatbot WhatsApp - Gestor Comercial interativo com tool-calling.'''
 import json
 import logging
+import re
 from collections import defaultdict, deque
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -40,7 +41,14 @@ REGRAS:
 e filtre o dia desejado no resultado — se nao houver registro do dia, diga que nao houve venda \
 lancada naquele dia.
 8. Se a pergunta nao for sobre vendas/negocio, responda brevemente que voce e o assistente \
-comercial e lista o que sabe fazer.'''
+comercial e lista o que sabe fazer.
+
+FORMATACAO WHATSAPP (obrigatorio):
+- Negrito: UM asterisco em volta da palavra: *negrito*. NUNCA use ** (dois asteriscos) — o \
+WhatsApp NAO renderiza e fica feio.
+- Italico: um underscore: _italico_.
+- Listas: use hifens "- item" ou numeros "1. item". Nada de markdown de cabecalho (#).
+- Nao use ``` nem tabelas.'''
 
 
 def _build_system_prompt() -> str:
@@ -121,6 +129,17 @@ TOOLS = [
 _history: dict[str, deque] = defaultdict(lambda: deque(maxlen=MAX_HISTORY_TURNS * 2))
 
 
+def _to_whatsapp_format(text: str) -> str:
+    '''Normaliza formatacao do texto para o WhatsApp.'''
+    # **bold** (markdown) -> *bold* (wpp)
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text, flags=re.DOTALL)
+    # __italic__ -> _italic_
+    text = re.sub(r'__(.+?)__', r'_\1_', text, flags=re.DOTALL)
+    # remove cabecalhos markdown (# heading)
+    text = re.sub(r'^\s{0,3}#{1,6}\s+', '', text, flags=re.MULTILINE)
+    return text
+
+
 async def _run_tool(db: AsyncSession, name: str, args: dict) -> str:
     '''Executa a ferramenta solicitada e retorna JSON string.'''
     try:
@@ -166,6 +185,7 @@ async def chat_service(db: AsyncSession, sender: str, text: str) -> str:
 
         if not msg.tool_calls:
             reply = (msg.content or '').strip() or 'Nao consegui gerar resposta.'
+            reply = _to_whatsapp_format(reply)
             history.append({'role': 'assistant', 'content': reply})
             return reply
 
