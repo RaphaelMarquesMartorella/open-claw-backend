@@ -214,7 +214,7 @@ async def get_comparativo_diario_repository(db: AsyncSession, dias: int = 30) ->
             TO_CHAR(c."DTNEG"::date, 'YYYY-MM-DD') AS data,
             COALESCE(SUM(c."VLRNOTA"), 0) AS faturamento
         FROM "TGFCAB" c
-        WHERE c."DTNEG" >= CURRENT_DATE - :dias
+        WHERE c."DTNEG" >= CURRENT_DATE - make_interval(days => :dias)
           AND c."STATUSNOTA" = 'L'
         GROUP BY c."DTNEG"::date
         ORDER BY c."DTNEG"::date
