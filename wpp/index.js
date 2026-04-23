@@ -70,14 +70,36 @@ function normalizeNumber(raw) {
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/qr', async (req, res) => {
-    if (state.ready) return res.status(200).send('<h1>Ja conectado ao WhatsApp</h1>');
-    if (!state.qr) return res.status(503).send('<h1>Aguardando QR... recarregue em alguns segundos</h1>');
-    const dataUrl = await QRCode.toDataURL(state.qr, { width: 400, margin: 2 });
-    res.send(`<!doctype html><html><body style="font-family:sans-serif;text-align:center;padding:40px">
-        <h2>Escaneie o QR no WhatsApp do diretor</h2>
-        <img src="${dataUrl}" alt="qr"/>
-        <p>Recarregue a pagina apos escanear.</p>
+app.get('/qr.png', async (req, res) => {
+    if (!state.qr) return res.status(404).end();
+    const buf = await QRCode.toBuffer(state.qr, { width: 400, margin: 2 });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'no-store');
+    res.send(buf);
+});
+
+app.get('/qr', (req, res) => {
+    res.send(`<!doctype html><html><head><meta charset="utf-8"><title>OpenClaw WhatsApp</title></head>
+    <body style="font-family:sans-serif;text-align:center;padding:40px;background:#111;color:#eee">
+        <h2 id="title">Escaneie o QR no WhatsApp do diretor</h2>
+        <img id="qr" src="/qr.png?t=${Date.now()}" style="background:#fff;padding:16px;border-radius:8px" alt="qr"/>
+        <p id="info">Atualizando automaticamente a cada 5s...</p>
+        <script>
+        async function tick(){
+            try {
+                const r = await fetch('/status'); const s = await r.json();
+                if (s.ready) {
+                    document.getElementById('title').textContent = 'Conectado com sucesso';
+                    document.getElementById('qr').style.display = 'none';
+                    document.getElementById('info').textContent = 'WhatsApp pronto para enviar mensagens.';
+                    return;
+                }
+                document.getElementById('qr').src = '/qr.png?t=' + Date.now();
+            } catch(e) {}
+            setTimeout(tick, 5000);
+        }
+        setTimeout(tick, 5000);
+        </script>
     </body></html>`);
 });
 
