@@ -13,10 +13,6 @@ RUN npm install --omit=dev
 
 COPY index.js ./
 
-RUN chown -R pptruser:pptruser /app
-
-USER pptruser
-
 EXPOSE 3001
 
 CMD ["node", "index.js"]
