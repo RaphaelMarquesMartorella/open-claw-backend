@@ -4,3 +4,4 @@ from .produtos_router_v1 import produtos_router
 from .clientes_router_v1 import clientes_router
 from .agente_router_v1 import agente_router
 from .reports_router_v1 import reports_router
+from .chat_router_v1 import chat_router

@@ -17,7 +17,7 @@ from core.configs import settings
 from core.logger import setup_logging
 from core.database import SessionLocal, engine
 from core.configs import settings as cfg
-from routers import dsh, vnd, prd, cli, agt, rpt
+from routers import dsh, vnd, prd, cli, agt, rpt, cht
 
 # Configurar logging
 setup_logging()
@@ -99,6 +99,7 @@ app.include_router(prd, prefix='/api/v1/produtos', tags=['Produtos'])
 app.include_router(cli, prefix='/api/v1/clientes', tags=['Clientes'])
 app.include_router(agt, prefix='/api/v1/agente', tags=['Agente'])
 app.include_router(rpt, prefix='/api/v1/relatorios', tags=['Relatorios'])
+app.include_router(cht, prefix='/api/v1/chat', tags=['Chat'])
 
 
 @app.get('/api/health')

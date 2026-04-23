@@ -5,4 +5,5 @@ from .v1 import (
     clientes_router as cli,
     agente_router as agt,
     reports_router as rpt,
+    chat_router as cht,
 )

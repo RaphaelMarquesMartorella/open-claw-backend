@@ -7,6 +7,8 @@ const { Client, LocalAuth } = whatsappWeb;
 
 const PORT = process.env.PORT || 3001;
 const CLIENT_ID = process.env.WPP_CLIENT_ID || 'openclaw';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://openclaw-backend:8000';
+const ALLOWED_SENDERS = (process.env.ALLOWED_SENDERS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 const state = {
     ready: false,
@@ -59,6 +61,48 @@ client.on('disconnected', (reason) => {
     state.ready = false;
     state.lastError = `disconnected: ${reason}`;
     client.initialize();
+});
+
+client.on('message', async (message) => {
+    try {
+        if (message.fromMe) return;
+        if (message.from.endsWith('@g.us')) return;
+        if (message.from === 'status@broadcast') return;
+        if (message.type !== 'chat' || !message.body) return;
+
+        if (ALLOWED_SENDERS.length > 0) {
+            const digits = message.from.replace(/\D/g, '');
+            const allowed = ALLOWED_SENDERS.some(a => digits.includes(a.replace(/\D/g, '')));
+            if (!allowed) {
+                console.log(`[WPP] ignorando remetente nao autorizado: ${message.from}`);
+                return;
+            }
+        }
+
+        console.log(`[WPP] <- ${message.from}: ${message.body.slice(0, 120)}`);
+        const chat = await message.getChat();
+        await chat.sendStateTyping();
+
+        const res = await fetch(`${BACKEND_URL}/api/v1/chat/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sender: message.from, text: message.body }),
+        });
+
+        if (!res.ok) {
+            const txt = await res.text();
+            console.error(`[WPP] backend ${res.status}: ${txt}`);
+            await message.reply('Desculpe, tive um problema pra responder. Tenta de novo em instantes.');
+            return;
+        }
+
+        const { reply } = await res.json();
+        await message.reply(reply);
+        console.log(`[WPP] -> ${message.from}: ${reply.slice(0, 120)}`);
+    } catch (ex) {
+        console.error('[WPP] erro no handler de mensagem:', ex);
+        try { await message.reply('Erro interno. Tenta de novo.'); } catch {}
+    }
 });
 
 function normalizeNumber(raw) {
