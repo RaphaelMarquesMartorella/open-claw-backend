@@ -1,5 +1,6 @@
 import express from 'express';
 import qrcode from 'qrcode-terminal';
+import QRCode from 'qrcode';
 import whatsappWeb from 'whatsapp-web.js';
 
 const { Client, LocalAuth } = whatsappWeb;
@@ -68,6 +69,17 @@ function normalizeNumber(raw) {
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+
+app.get('/qr', async (req, res) => {
+    if (state.ready) return res.status(200).send('<h1>Ja conectado ao WhatsApp</h1>');
+    if (!state.qr) return res.status(503).send('<h1>Aguardando QR... recarregue em alguns segundos</h1>');
+    const dataUrl = await QRCode.toDataURL(state.qr, { width: 400, margin: 2 });
+    res.send(`<!doctype html><html><body style="font-family:sans-serif;text-align:center;padding:40px">
+        <h2>Escaneie o QR no WhatsApp do diretor</h2>
+        <img src="${dataUrl}" alt="qr"/>
+        <p>Recarregue a pagina apos escanear.</p>
+    </body></html>`);
+});
 
 app.get('/status', (req, res) => {
     res.json({
