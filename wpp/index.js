@@ -79,26 +79,41 @@ app.get('/qr.png', async (req, res) => {
 });
 
 app.get('/qr', (req, res) => {
+    const baseStyle = 'font-family:sans-serif;text-align:center;padding:40px;background:#111;color:#eee';
+    if (state.ready) {
+        return res.send(`<!doctype html><html><head><meta charset="utf-8"><title>OpenClaw WhatsApp</title></head>
+        <body style="${baseStyle}">
+            <h2>WhatsApp conectado</h2>
+            <p>Pronto para enviar mensagens.</p>
+        </body></html>`);
+    }
+    const qrSrc = state.qr ? `/qr.png?t=${Date.now()}` : '';
     res.send(`<!doctype html><html><head><meta charset="utf-8"><title>OpenClaw WhatsApp</title></head>
-    <body style="font-family:sans-serif;text-align:center;padding:40px;background:#111;color:#eee">
-        <h2 id="title">Escaneie o QR no WhatsApp do diretor</h2>
-        <img id="qr" src="/qr.png?t=${Date.now()}" style="background:#fff;padding:16px;border-radius:8px" alt="qr"/>
-        <p id="info">Atualizando automaticamente a cada 5s...</p>
+    <body style="${baseStyle}">
+        <h2 id="title">${state.qr ? 'Escaneie o QR no WhatsApp do diretor' : 'Gerando QR code...'}</h2>
+        <img id="qr" src="${qrSrc}" style="background:#fff;padding:16px;border-radius:8px;${state.qr ? '' : 'display:none'}" alt=""/>
+        <p id="info">${state.qr ? 'A pagina atualiza sozinha.' : 'Aguarde alguns segundos.'}</p>
         <script>
         async function tick(){
             try {
                 const r = await fetch('/status'); const s = await r.json();
                 if (s.ready) {
-                    document.getElementById('title').textContent = 'Conectado com sucesso';
+                    document.getElementById('title').textContent = 'WhatsApp conectado';
                     document.getElementById('qr').style.display = 'none';
-                    document.getElementById('info').textContent = 'WhatsApp pronto para enviar mensagens.';
+                    document.getElementById('info').textContent = 'Pronto para enviar mensagens.';
                     return;
                 }
-                document.getElementById('qr').src = '/qr.png?t=' + Date.now();
+                if (s.waiting_qr) {
+                    const img = document.getElementById('qr');
+                    img.style.display = '';
+                    img.src = '/qr.png?t=' + Date.now();
+                    document.getElementById('title').textContent = 'Escaneie o QR no WhatsApp do diretor';
+                    document.getElementById('info').textContent = 'A pagina atualiza sozinha.';
+                }
             } catch(e) {}
-            setTimeout(tick, 5000);
+            setTimeout(tick, 3000);
         }
-        setTimeout(tick, 5000);
+        tick();
         </script>
     </body></html>`);
 });
