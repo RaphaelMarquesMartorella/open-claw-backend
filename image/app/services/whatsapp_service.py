@@ -1,25 +1,21 @@
-'''Service de envio de mensagens via WhatsApp.'''
+'''Service de envio de mensagens via WhatsApp (microservico wweb.js).'''
 import logging
 import json
+import httpx
 from core.configs import settings
-from core.httpx_client import http_client
 
 logger = logging.getLogger('AGENT.WHATSAPP')
 
 
 async def send_whatsapp_report_service(report_text: str) -> dict:
-    '''Envia relatorio via WhatsApp. Retorna status do envio.'''
+    '''Envia relatorio via WhatsApp chamando o microservico Node (whatsapp-web.js).'''
 
     number = settings.WHATSAPP_DIRECTOR_NUMBER
     api_url = settings.WHATSAPP_API_URL
-    api_key = settings.WHATSAPP_API_KEY
 
-    if not api_url or not api_key or not number:
+    if not api_url or not number:
         logger.warning('WhatsApp nao configurado. Logando payload...')
-        payload = {
-            'number': number or 'NAO_CONFIGURADO',
-            'text': report_text,
-        }
+        payload = {'number': number or 'NAO_CONFIGURADO', 'text': report_text}
         logger.info(f'WHATSAPP PAYLOAD (mock): {json.dumps(payload, ensure_ascii=False)[:500]}...')
         return {
             'status': 'mock',
@@ -27,34 +23,21 @@ async def send_whatsapp_report_service(report_text: str) -> dict:
             'payload': payload,
         }
 
+    url = f'{api_url.rstrip("/")}/send-message'
+    payload = {'number': number, 'text': report_text}
+
     try:
-        # Formato compativel com Evolution API / Z-API / Meta Cloud API
-        payload = {
-            'number': number,
-            'text': report_text,
-        }
+        async with httpx.AsyncClient(timeout=60) as http:
+            response = await http.post(url, json=payload)
+            data = response.json() if response.content else {}
 
-        headers = {
-            'Content-Type': 'application/json',
-            'apikey': api_key,
-        }
+        if response.status_code >= 400:
+            logger.error(f'wweb.js respondeu {response.status_code}: {data}')
+            return {'status': 'error', 'message': data.get('message', f'HTTP {response.status_code}')}
 
-        # Tenta Evolution API format
-        url = f'{api_url}/message/sendText/openclaw'
-
-        response = await http_client.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-
-        logger.info(f'WhatsApp enviado com sucesso para {number}')
-        return {
-            'status': 'sent',
-            'message': f'Relatorio enviado para {number}',
-            'response': response.json(),
-        }
+        logger.info(f'WhatsApp enviado para {number} (id={data.get("id")})')
+        return {'status': 'sent', 'message': f'Relatorio enviado para {number}', 'response': data}
 
     except Exception as ex:
-        logger.error(f'Erro ao enviar WhatsApp: {ex}')
-        return {
-            'status': 'error',
-            'message': str(ex),
-        }
+        logger.error(f'Erro ao chamar wweb.js: {ex}')
+        return {'status': 'error', 'message': str(ex)}
