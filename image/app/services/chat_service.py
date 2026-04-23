@@ -16,6 +16,7 @@ from repositories import (
     get_comparativo_diario_repository,
     get_vendedor_detalhe_repository,
 )
+from .report_gen_service import VALID_FORMATOS, VALID_TIPOS, gerar_relatorio
 
 logger = logging.getLogger('AGENT.CHAT')
 
@@ -123,6 +124,33 @@ TOOLS = [
             },
         },
     },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'gerar_relatorio',
+            'description': (
+                'Gera um arquivo de relatorio em PDF ou Excel e anexa na resposta. '
+                'Use quando o usuario pedir um relatorio, planilha, arquivo ou documento. '
+                'Na mensagem final para o usuario, apenas informe que o arquivo foi gerado e esta em anexo.'
+            ),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'tipo': {
+                        'type': 'string',
+                        'enum': VALID_TIPOS,
+                        'description': 'Tipo do relatorio. Use "completo" se o usuario quiser tudo.',
+                    },
+                    'formato': {
+                        'type': 'string',
+                        'enum': VALID_FORMATOS,
+                        'description': 'pdf ou excel. Se o usuario nao especificar, pergunte antes.',
+                    },
+                },
+                'required': ['tipo', 'formato'],
+            },
+        },
+    },
 ]
 
 
@@ -140,8 +168,8 @@ def _to_whatsapp_format(text: str) -> str:
     return text
 
 
-async def _run_tool(db: AsyncSession, name: str, args: dict) -> str:
-    '''Executa a ferramenta solicitada e retorna JSON string.'''
+async def _run_tool(db: AsyncSession, name: str, args: dict, attachments: list) -> str:
+    '''Executa a ferramenta solicitada e retorna JSON string. Anexos sao adicionados a lista.'''
     try:
         if name == 'get_kpis':
             data = await get_kpis_repository(db)
@@ -157,6 +185,10 @@ async def _run_tool(db: AsyncSession, name: str, args: dict) -> str:
             data = await get_comparativo_diario_repository(db, max(1, min(dias, 90)))
         elif name == 'get_vendedor_detalhe':
             data = await get_vendedor_detalhe_repository(db, int(args['codvend']))
+        elif name == 'gerar_relatorio':
+            att = await gerar_relatorio(db, args.get('tipo'), args.get('formato'))
+            attachments.append(att)
+            data = {'status': 'ok', 'filename': att['filename'], 'size_bytes': att['size_bytes']}
         else:
             data = {'error': f'ferramenta desconhecida: {name}'}
         return json.dumps(data, ensure_ascii=False, default=str)
@@ -165,12 +197,13 @@ async def _run_tool(db: AsyncSession, name: str, args: dict) -> str:
         return json.dumps({'error': str(ex)})
 
 
-async def chat_service(db: AsyncSession, sender: str, text: str) -> str:
-    '''Processa uma mensagem e retorna a resposta do agente.'''
+async def chat_service(db: AsyncSession, sender: str, text: str) -> tuple[str, list[dict]]:
+    '''Processa uma mensagem e retorna (resposta, anexos).'''
     history = _history[sender]
     history.append({'role': 'user', 'content': text})
 
     messages = [{'role': 'system', 'content': _build_system_prompt()}] + list(history)
+    attachments: list[dict] = []
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -187,7 +220,7 @@ async def chat_service(db: AsyncSession, sender: str, text: str) -> str:
             reply = (msg.content or '').strip() or 'Nao consegui gerar resposta.'
             reply = _to_whatsapp_format(reply)
             history.append({'role': 'assistant', 'content': reply})
-            return reply
+            return reply, attachments
 
         messages.append({
             'role': 'assistant',
@@ -204,9 +237,9 @@ async def chat_service(db: AsyncSession, sender: str, text: str) -> str:
             except json.JSONDecodeError:
                 args = {}
             logger.info(f'[{sender}] tool={tc.function.name} args={args}')
-            result = await _run_tool(db, tc.function.name, args)
+            result = await _run_tool(db, tc.function.name, args, attachments)
             messages.append({'role': 'tool', 'tool_call_id': tc.id, 'content': result})
 
     fallback = 'Nao consegui completar a analise. Tenta reformular a pergunta.'
     history.append({'role': 'assistant', 'content': fallback})
-    return fallback
+    return fallback, attachments

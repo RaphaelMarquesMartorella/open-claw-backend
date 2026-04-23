@@ -3,7 +3,7 @@ import qrcode from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import whatsappWeb from 'whatsapp-web.js';
 
-const { Client, LocalAuth } = whatsappWeb;
+const { Client, LocalAuth, MessageMedia } = whatsappWeb;
 
 const PORT = process.env.PORT || 3001;
 const CLIENT_ID = process.env.WPP_CLIENT_ID || 'openclaw';
@@ -96,9 +96,18 @@ client.on('message', async (message) => {
             return;
         }
 
-        const { reply } = await res.json();
-        await message.reply(reply);
-        console.log(`[WPP] -> ${message.from}: ${reply.slice(0, 120)}`);
+        const { reply, attachments = [] } = await res.json();
+        if (reply) await message.reply(reply);
+        for (const att of attachments) {
+            try {
+                const media = new MessageMedia(att.mime_type, att.data_base64, att.filename);
+                await chat.sendMessage(media, { sendMediaAsDocument: true, caption: att.filename });
+                console.log(`[WPP] -> ${message.from}: anexo ${att.filename} (${att.mime_type})`);
+            } catch (e) {
+                console.error('[WPP] erro ao enviar anexo:', e);
+            }
+        }
+        console.log(`[WPP] -> ${message.from}: ${(reply || '').slice(0, 120)}`);
     } catch (ex) {
         console.error('[WPP] erro no handler de mensagem:', ex);
         try { await message.reply('Erro interno. Tenta de novo.'); } catch {}
